@@ -49,7 +49,7 @@ def compile(path):
 # Currently we're using Python http server as our target server
 def run_target(host, port, target_home):
     cmd = ['python3', '-m', 'http.server', f'{port}']
-    return subprocess.Popen(cmd, cwd=target_home, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return subprocess.Popen(cmd, cwd=target_home, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 # Run the proxy server
 # ports: 'nl' number of free ports, listener threads listen on these ports
@@ -61,7 +61,7 @@ def run_target(host, port, target_home):
 # test_home: Where the source files for the proxy server are located
 def run_proxy(ports, nl, nw, server_host, server_port, q, test_home):
     compile(test_home)
-    program_name = './proxyserver'
+    program_name = test_home + '/proxyserver'
     str_ports = [str(port) for port in ports]
     cmd = [program_name,
                        '-l', str(nl), *str_ports,
@@ -69,7 +69,7 @@ def run_proxy(ports, nl, nw, server_host, server_port, q, test_home):
                        '-i', socket.gethostbyname(server_host),
                        '-p', str(server_port),
                        '-q', str(q)]
-    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 # Calls run_proxy and run_target functions (if no_target is not set)
 # Used when 'start.py' is called directly
