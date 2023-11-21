@@ -254,6 +254,13 @@ int main(int argc, char **argv) {
     }
     print_settings();
 
+    ///////////////////////////////////////////////////////////////////////
+    pthread_t thread_ids[num_listener];
+    for (int i = 0; i < num_listener; i++) {
+        //pthread_create(&thread_ids[i], NULL,    ,       ); 
+    }
+
+
     serve_forever(&server_fd);
 
     return EXIT_SUCCESS;
