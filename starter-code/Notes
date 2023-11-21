@@ -2,59 +2,79 @@ UPDATES:
 
 
 
+From Video:
+include pthread.h
+create new pthread variable
+then callpthread create. need a thread function and an arguemnt. 
+In order to pass client socket it needs to be a pointer. So allocate some same on heap for an int and then store the value of client socket there. 
+
+Now we are passing the socket to the thread.
+
+Thread functions need to return void* and take a void* as an argument.
+
+He immediately assigns pointer to local variable and then frees pointer.
+Now need to return null instead of just return(if appicabke)
+
+
+
+
 
 
 
 Sockets
-Sock_stream (TCP): Reliable, connection-oriented.
-Sock_dgram (UDP): Faster, but does not guarantee data arrival. Reliability can be implemented on top by having the receiver send an acknowledgement.
+    *When a client connects to the server, a socket is created, and a file descriptor is used to uniquely identify this socket.
+
+    *Sock_stream (TCP): Reliable, connection-oriented.
+
+    *Sock_dgram (UDP): Faster, but does not guarantee data arrival. Reliability can be 
+    implemented on top by having the receiver send an acknowledgement.
 
 
 Server-Client Communication
 
 Client:
-Socket(): Create a socket.
-Connect(): Connect to a server's accept().
-Send/Receive: Data transmission.
-Close(): Close the socket.
+    *Socket(): Create a socket.
+    *Connect(): Connect to a server's accept().
+    *Send/Receive: Data transmission.
+    *Close(): Close the socket.
 
 Server:
-Socket: Create a socket.
-Bind(): Bind to a specific port.
-Listen(): Listen for connections.
-Accept(): Accept a client connection (blocks until a connection is made).
-Shutdown(): Optional step before closing.
-Close(): Close the socket.
+    *Socket: Create a socket.
+    *Bind(): Bind to a specific port.
+    *Listen(): Listen for connections.
+    *Accept(): Accept a client connection (blocks until a connection is made).
+    *Shutdown(): Optional step before closing.
+    *Close(): Close the socket.
 
 
 Proxy Server
-Currently single-threaded.
-Accepts a client connection, handles the request, forwards it to the target, waits for the response, then sends it back to the client.
+    *Currently single-threaded.
+    *Accepts a client connection, handles the request, forwards it to the target, waits for the response, then sends it back to the client.
 
 
 
 Multithreading in Proxy Server
 
 Listeners:
-Accept connections from clients on individual ports.
-Add requests to a priority queue but don’t handle them directly.
+    *Accept connections from clients on individual ports.
+    *Add requests to a priority queue but don’t handle them directly.
 
 Worker Threads:
-Wait for work from the priority queue.
-Handle the entire cycle of forwarding requests to the target server and responding back to clients.
+    *Wait for work from the priority queue.
+    *Handle the entire cycle of forwarding requests to the target server and responding back to clients.
 
 
 
 
 Implementation Details
 
-Address split into IP and port. Some ports are reserved for operating systems.
-Each thread opens its own socket with its own port.
-A file descriptor (fd) is associated with each socket. The current setup uses a global variable for server fd, which may not need to be global.
+    *Address split into IP and port. Some ports are reserved for operating systems.
+    *Each thread opens its own socket with its own port.
+    *A file descriptor (fd) is associated with each socket. The current setup uses a global variable for server fd, which may not need to be global.
 
 Proxy Server Functionality
-The main function, serve_forever, waits for a connection, binds to a port, listens, and then enters a loop waiting to accept a connection.
-The goal is to modify the server to process multiple requests simultaneously.
+    *The function, serve_forever, waits for a connection, binds to a port, listens, and then enters a loop waiting to accept a connection.
+    *The goal is to modify the server to process multiple requests simultaneously.
 
 
 
@@ -62,15 +82,15 @@ Request Handling
 
 Requests:
 
-Structured in proxyserver.h.
-Currently, do not handle delays.
-Priority determined by the file server serving from the public_html directory.
+    *Structured in proxyserver.h.
+    *Currently, do not handle delays.
+    *Priority determined by the file server serving from the public_html directory.
 
 Serve Request:
 
-Open another socket to initiate a connection to the file server.
-Read from the client, forward to the file server, receive the response, and send it back to the client.
-Each thread handles one request at a time, getting jobs from the priority queue.
+    *Open another socket to initiate a connection to the file server.
+    *Read from the client, forward to the file server, receive the response, and send it back to the client.
+    *Each thread handles one request at a time, getting jobs from the priority queue.
 
 
 Target Server and Clients
@@ -81,7 +101,7 @@ Clients: Interact with the proxy server.
 
 
 Modifications in PROXYserver.c
-Change from single socket listening to a group of listener threads, each with its own socket.
-Implement a loop where these threads wait for client connections.
+    *Change from single socket listening to a group of listener threads, each with its own socket.
+    *Implement a loop where these threads wait for client connections.
 
 
