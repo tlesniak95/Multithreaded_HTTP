@@ -91,7 +91,7 @@ void serve_request(int client_fd)
     char *buffer = (char *)malloc(RESPONSE_BUFSIZE * sizeof(char));
 
     // forward the client request to the fileserver
-    int bytes_read = read(client_fd, buffer, RESPONSE_BUFSIZE);  // Reads data from the client socket.
+    int bytes_read = recv(client_fd, buffer, RESPONSE_BUFSIZE, MSG_PEEK);  // Reads data from the client socket.
     int ret = http_send_data(fileserver_fd, buffer, bytes_read); // Sends the read data to the file server.
     if (ret < 0)
     {
@@ -115,11 +115,13 @@ void serve_request(int client_fd)
             }
         }
     }
-
+    /////////////////////////////////////////////////
+    //Closing the connection to the client server here, not sure if this is the correct place.
+    shutdown(client_fd, SHUT_WR);
+    close(client_fd);
     // close the connection to the fileserver
     shutdown(fileserver_fd, SHUT_WR);
     close(fileserver_fd);
-
     // Free resources and exit
     free(buffer);
 }
@@ -160,7 +162,6 @@ typedef struct
 // this is to allow the function to be used as a thread.
 void *serve_forever(void *arg)
 {
-
     /////////////////////////////////////////////////////////////////////////////////////////////////////
     ThreadArgs *threadArgs = (ThreadArgs *)arg; // casting the void pointer to a ThreadArgs pointer.
     // next I'm getting the args into local variables.
@@ -175,7 +176,6 @@ void *serve_forever(void *arg)
         perror("Failed to create a new socket");
         exit(errno);
     }
-
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
     server_fds[index] = server_fd; // storing the server_fd in the server_fds array.
 
@@ -190,7 +190,6 @@ void *serve_forever(void *arg)
         perror("Failed to set socket options");
         exit(errno);
     }
-
     int proxy_port = port;
     // create the full address of this proxyserver
     // he port number is taken from listener_ports[0] and converted to network byte order using htons().
@@ -207,7 +206,6 @@ void *serve_forever(void *arg)
         perror("Failed to bind on socket");
         exit(errno);
     }
-
     /*Marks the socket as a passive socket that will be used to accept incoming
     connection requests. 1024 is the maximum length of the queue of pending connections.
     */
@@ -224,7 +222,7 @@ void *serve_forever(void *arg)
     int client_fd;
     // The while loop uses accept to wait for and accept incoming connection requests.
     while (1)
-    {
+    {   
         // When a client connects, accept returns a new socket file descriptor for this specific connection.
         client_fd = accept(server_fd,
                            (struct sockaddr *)&client_address,
@@ -249,14 +247,12 @@ void *serve_forever(void *arg)
 
         // Now path, priority, and delay variables hold the extracted values
         // Remember to free path when you are done with it
-
         struct http_request *request = http_request_parse(client_fd);
         if (request == NULL)
         {
             // Handle parse error
             continue;
         }
-
         if (strcmp(request->path, GETJOBCMD) == 0)
         {
             // It's a GetJob request
@@ -267,29 +263,46 @@ void *serve_forever(void *arg)
                 // There are no jobs in the queue
                 // Send an error response to the client
                 send_error_response(client_fd, QUEUE_EMPTY, "Not Found");
+                shutdown(client_fd, SHUT_WR);
+                close(client_fd);
             }
             else
             {
                 ///NOT SURE ABOUT THIS FORMAT
+                ///////////////////////////////////////////////////////////////////////////////////////////
+                //The format you used works, and passes the tests. I just changed it to use the send_error_response function,
+                //based on the piazza post https://piazza.com/class/llnp9g1fwu33yx/post/1411
 
                 // There is a job in the queue
                 // Send the job to the client
-                http_start_response(client_fd, OK);
-                http_send_header(client_fd, "Content-Type", "text/plain");
-                http_end_headers(client_fd);
-                http_send_string(client_fd, job->path);
+                // http_start_response(client_fd, OK);
+                // http_send_header(client_fd, "Content-Type", "text/plain");
+                // http_end_headers(client_fd);
+                // http_send_string(client_fd, job->path);
+                send_error_response(client_fd, OK, job->path);
+
+                shutdown(client_fd, SHUT_WR);
+                close(client_fd);
             }
         }
         else
         {
             // It's not a GetJob request
             // Add the request to the priority queue
-            add_work(pq, client_fd, request->path, priority, delay);
-        }
 
-        free(request->method);
-        free(request->path);
-        free(request);
+            //Returns -1 when queue is full, send error response
+            if (add_work(pq, client_fd, request->path, priority, delay) == -1) {
+                send_error_response(client_fd, QUEUE_FULL, "Not Found");
+                shutdown(client_fd, SHUT_WR);
+                close(client_fd);
+            }
+        }
+        /////////////////////////////////////////////////
+        //Commenting out, since I think we are freeing the request prematurely. Tests break if these are uncommented
+        // free(request->method);
+        // free(request->path);
+        // free(request->delay);
+        // free(request);
 
         /**
          * commenting this out for now
@@ -297,8 +310,10 @@ void *serve_forever(void *arg)
         // serve_request(client_fd);
 
         // close the connection to the client
-        shutdown(client_fd, SHUT_WR);
-        close(client_fd);
+        //////////////////////////////////////////////////
+        //Shutting down the client prematurely, so i am commenting this out.
+        // shutdown(client_fd, SHUT_WR);
+        // close(client_fd);
     }
 
     shutdown(server_fd, SHUT_RDWR);
@@ -400,7 +415,9 @@ int main(int argc, char **argv)
         if (strcmp("-l", argv[i]) == 0)
         {
             num_listener = atoi(argv[++i]);
-            free(listener_ports);
+            /////////////////////////////////////////////////
+            //Commenting out for now, since I think we are freeing the listener_ports prematurely.
+            // free(listener_ports);
             listener_ports = (int *)malloc(num_listener * sizeof(int));
             for (int j = 0; j < num_listener; j++)
             {
@@ -430,7 +447,6 @@ int main(int argc, char **argv)
         }
     }
     print_settings();
-
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // Initialize the priority queue

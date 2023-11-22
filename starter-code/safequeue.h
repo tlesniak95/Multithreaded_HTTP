@@ -22,7 +22,9 @@ typedef struct {
 
 // Function prototypes
 PriorityQueue *create_queue(int max);
-void add_work(PriorityQueue *pq, int client_fd, char *path, int priority, int delay);
+//////////////////////////
+//Changing type to int, so that we can return 0 when the queue is full.
+int add_work(PriorityQueue *pq, int client_fd, char *path, int priority, int delay);
 QueueItem *get_work(PriorityQueue *pq);
 QueueItem *get_work_nonblocking(PriorityQueue *pq);
 
