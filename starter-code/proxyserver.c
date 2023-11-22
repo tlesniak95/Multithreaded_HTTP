@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "proxyserver.h"
+#include "safequeue.h"
 
 /*
  * Constants
@@ -130,7 +131,7 @@ Instead of using a global server_fd, I will use an array to store each threads s
 
 // int server_fd;   COMMENTING OUT old version of server_fd
 
-#define MAX_LISTENERS 100 // adjust if expecting more than 100 threads.
+#define MAX_LISTENERS 15 // adjust if expecting more than 100 threads.
 int server_fds[MAX_LISTENERS];
 
 void initialize_server_fds()
@@ -146,6 +147,7 @@ typedef struct
 {
     int port;  // given in command line
     int index; // will be used to store the index of the thread in the server_fds array.
+    PriorityQueue *pq;
 } ThreadArgs;
 
 /*
@@ -164,6 +166,7 @@ void *serve_forever(void *arg)
     // next I'm getting the args into local variables.
     int port = threadArgs->port;
     int index = threadArgs->index;
+    PriorityQueue *pq = threadArgs->pq;
     free(arg);
     // create a socket to listen
     int server_fd = socket(PF_INET, SOCK_STREAM, 0);
@@ -188,7 +191,6 @@ void *serve_forever(void *arg)
         exit(errno);
     }
 
-    // function currently only utilizes the first listener port.
     int proxy_port = port;
     // create the full address of this proxyserver
     // he port number is taken from listener_ports[0] and converted to network byte order using htons().
@@ -237,7 +239,62 @@ void *serve_forever(void *arg)
                inet_ntoa(client_address.sin_addr),
                client_address.sin_port);
 
-        serve_request(client_fd);
+        ///////////////////////////////////////////////////////////////////////////////////////////////
+
+        char *client_request_path = NULL;
+        int priority = -1;
+        int delay = -1;
+
+        parse_client_request(client_fd, &client_request_path, &priority, &delay);
+
+        // Now path, priority, and delay variables hold the extracted values
+        // Remember to free path when you are done with it
+
+        struct http_request *request = http_request_parse(client_fd);
+        if (request == NULL)
+        {
+            // Handle parse error
+            continue;
+        }
+
+        if (strcmp(request->path, GETJOBCMD) == 0)
+        {
+            // It's a GetJob request
+            // Get the highest priority job from the priority queue
+            QueueItem *job = get_work_nonblocking(pq);
+            if (job == NULL)
+            {
+                // There are no jobs in the queue
+                // Send an error response to the client
+                send_error_response(client_fd, QUEUE_EMPTY, "Not Found");
+            }
+            else
+            {
+                ///NOT SURE ABOUT THIS FORMAT
+
+                // There is a job in the queue
+                // Send the job to the client
+                http_start_response(client_fd, OK);
+                http_send_header(client_fd, "Content-Type", "text/plain");
+                http_end_headers(client_fd);
+                http_send_string(client_fd, job->path);
+            }
+        }
+        else
+        {
+            // It's not a GetJob request
+            // Add the request to the priority queue
+            add_work(pq, client_fd, request->path, priority, delay);
+        }
+
+        free(request->method);
+        free(request->path);
+        free(request);
+
+        /**
+         * commenting this out for now
+         */
+        // serve_request(client_fd);
 
         // close the connection to the client
         shutdown(client_fd, SHUT_WR);
@@ -303,6 +360,33 @@ void exit_with_usage()
     exit(EXIT_SUCCESS);
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////
+void *worker_thread_function(void *arg)
+{
+    PriorityQueue *pq = (PriorityQueue *)arg;
+
+    while (1)
+    {
+        // Attempt to get a job from the priority queue
+        QueueItem *job = get_work(pq);
+
+        // Check for delay in the request and sleep if necessary
+        int delay = job->delay;
+        if (delay > 0)
+        {
+            sleep(delay);
+        }
+
+        // Process the job
+        serve_request(job->client_fd);
+
+        // Cleanup
+        free(job->path);
+        free(job);
+    }
+    return NULL;
+}
+
 int main(int argc, char **argv)
 {
     signal(SIGINT, signal_callback_handler);
@@ -349,19 +433,46 @@ int main(int argc, char **argv)
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    initialize_server_fds(); // Initialize the server_fds array
+    // Initialize the priority queue
+    PriorityQueue *pq = create_queue(max_queue_size);
 
+    initialize_server_fds(); // Initialize the server_fds array
     pthread_t threads[num_listener];
     for (int i = 0; i < num_listener; i++)
     {
         ThreadArgs *args = malloc(sizeof(ThreadArgs)); // Allocate memory for arguments
         args->port = listener_ports[i];
         args->index = i; // The index in the server_fds array
+        args->pq = pq;
         if (pthread_create(&threads[i], NULL, serve_forever, args) != 0)
         {
             perror("Failed to create thread");
             // Handle error
         }
+        
     }
-    return EXIT_SUCCESS;
+
+    // Start worker threads
+    pthread_t workers[num_workers];
+    for (int i = 0; i < num_workers; i++)
+    {
+        if (pthread_create(&workers[i], NULL, worker_thread_function, (void *)pq) != 0)
+        {
+            perror("Failed to create worker thread");
+            // Handle error
+        }
+        
+    }
+
+     // Join listener threads
+    for (int i = 0; i < num_listener; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    // Join worker threads
+    for (int i = 0; i < num_workers; i++) {
+        pthread_join(workers[i], NULL);
+    }
+
+    exit(EXIT_SUCCESS);
 }

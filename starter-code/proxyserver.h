@@ -174,12 +174,60 @@ char *http_get_response_message(int status_code) {
     }
 }
 
+void parse_client_request(int fd, char **path, int *priority, int *delay) {
+    char *read_buffer = malloc(LIBHTTP_REQUEST_MAX_SIZE + 1);
+    if (!read_buffer) {
+        perror("Malloc failed");
+        return;
+    }
+
+    int bytes_read = read(fd, read_buffer, LIBHTTP_REQUEST_MAX_SIZE);
+    read_buffer[bytes_read] = '\0'; // Always null-terminate.
+
+    char *token = strtok(read_buffer, "\r\n");
+    int is_first = 1;
+    while (token != NULL) {
+        if (is_first) {
+            is_first = 0;
+            // Extract path
+            char *space1 = strstr(token, " ");
+            char *space2 = strstr(space1 + 1, " ");
+            int size = space2 - space1 - 1;
+            *path = strndup(space1 + 1, size);
+
+            // Extract priority
+            char *slash1 = strstr(*path, "/");
+            char *slash2 = strstr(slash1 + 1, "/");
+            size = slash2 - slash1 - 1;
+            char *p = strndup(slash1 + 1, size);
+            *priority = atoi(p);
+            free(p);
+        } else {
+            // Extract delay if present
+            char *colon = strstr(token, ":");
+            if (colon && strncmp("Delay", token, colon - token - 1) == 0) {
+                *delay = atoi(colon + 2);
+            }
+        }
+        token = strtok(NULL, "\r\n");
+    }
+
+    free(read_buffer);
+}
+
+
+
+
+/*
+
+MODIFYING THIS CODE
+
 void parse_client_request(int fd) {
     char *read_buffer = malloc(LIBHTTP_REQUEST_MAX_SIZE + 1);
     if (!read_buffer) http_fatal_error("Malloc failed");
 
     int bytes_read = read(fd, read_buffer, LIBHTTP_REQUEST_MAX_SIZE);
-    read_buffer[bytes_read] = '\0'; /* Always null-terminate. */
+    read_buffer[bytes_read] = '\0';// Always null-terminate. 
     printf("read buffer %s\n\n", read_buffer);
 
     int delay = -1;
@@ -230,6 +278,8 @@ void parse_client_request(int fd) {
     free(read_buffer);
     return;
 }
+*/
+
 
 
 
