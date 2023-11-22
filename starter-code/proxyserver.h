@@ -90,16 +90,12 @@ void http_fatal_error(char *message) {
 struct http_request *http_request_parse(int fd) {
     struct http_request *request = malloc(sizeof(struct http_request));
     if (!request) http_fatal_error("Malloc failed");
-
     char *read_buffer = malloc(LIBHTTP_REQUEST_MAX_SIZE + 1);
     if (!read_buffer) http_fatal_error("Malloc failed");
-
-    int bytes_read = read(fd, read_buffer, LIBHTTP_REQUEST_MAX_SIZE);
+    int bytes_read = recv(fd, read_buffer, LIBHTTP_REQUEST_MAX_SIZE, MSG_PEEK);
     read_buffer[bytes_read] = '\0'; /* Always null-terminate. */
-
     char *read_start, *read_end;
     size_t read_size;
-
     do {
         /* Read in the HTTP method: "[A-Z]*" */
         read_start = read_end = read_buffer;
@@ -147,6 +143,7 @@ struct http_request *http_request_parse(int fd) {
     return NULL;
 }
 
+
 char *http_get_response_message(int status_code) {
     switch (status_code) {
     case 100:
@@ -181,7 +178,7 @@ void parse_client_request(int fd, char **path, int *priority, int *delay) {
         return;
     }
 
-    int bytes_read = read(fd, read_buffer, LIBHTTP_REQUEST_MAX_SIZE);
+    int bytes_read = recv(fd, read_buffer, LIBHTTP_REQUEST_MAX_SIZE, MSG_PEEK);
     read_buffer[bytes_read] = '\0'; // Always null-terminate.
 
     char *token = strtok(read_buffer, "\r\n");
@@ -213,6 +210,7 @@ void parse_client_request(int fd, char **path, int *priority, int *delay) {
     }
 
     free(read_buffer);
+    return;
 }
 
 

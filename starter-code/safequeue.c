@@ -72,15 +72,22 @@ PriorityQueue *create_queue(int max)
     }
     return pq;
 }
-
-void add_work(PriorityQueue *pq, int client_fd, char *path, int priority, int delay)
+/////////////////////////////////////////////////
+//Chnaged type to int so we can return 0 for success and -1 for failure.
+int add_work(PriorityQueue *pq, int client_fd, char *path, int priority, int delay)
 {
     QueueItem *item = malloc(sizeof(QueueItem));
     item->client_fd = client_fd;
     item->path = path;
     item->priority = priority;
     item->delay = delay;
-    sem_wait(&pq->empty);
+    /////////////////////////////////////////////////
+    //Changed wait to trywait so that if the queue is full, we can return -1.
+    if (sem_trywait(&pq->empty) != 0)
+    {
+        // Queue is full or could not acquire semaphore
+        return -1;
+    }
     sem_wait(&pq->mutex);
     if (pq->head == NULL || pq->head->priority < item->priority)
     {
@@ -99,6 +106,9 @@ void add_work(PriorityQueue *pq, int client_fd, char *path, int priority, int de
     }
     sem_post(&pq->mutex);
     sem_post(&pq->full);
+    /////////////////////////////////////////////////
+    //return 0 for success
+    return 0;
 }
 
 
